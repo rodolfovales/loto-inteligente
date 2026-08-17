@@ -872,5 +872,27 @@ class MeusJogosPage
               padding:
                   const EdgeInsets.only(
                 bottom: 12,
+              ),              child: Card(
+                child: ListTile(
+                  leading: CircleAvatar(
+                    child: Text('${entrada.key + 1}'),
+                  ),
+                  title: Text(
+                    'Jogo ${entrada.key + 1}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  subtitle: Text(
+                    entrada.value.numeros.join(' - '),
+                  ),
+                ),
               ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
      
