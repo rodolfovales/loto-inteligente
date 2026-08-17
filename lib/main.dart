@@ -1,8 +1,12 @@
-import 'dart:math';
-import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:loto_inteligente/main.dart';
 
 void main() {
-  runApp(const LotoInteligenteApp());
+  testWidgets('Loto Inteligente inicia corretamente', (tester) async {
+    await tester.pumpWidget(const LotoInteligenteApp());
+
+    expect(find.text('Loto Inteligente'), findsOneWidget);
+  });
 }
 
 class LotoInteligenteApp extends StatelessWidget {
