@@ -852,16 +852,13 @@ class MeusJogosPage
 
         const SizedBox(height: 18),
 
-        if (jogos.isEmpty)
+                if (jogos.isEmpty)
           const Card(
             elevation: 0,
             child: Padding(
-              padding:
-                  EdgeInsets.all(24),
+              padding: EdgeInsets.all(24),
               child: Center(
-                child: Text(
-                  'Nenhum jogo salvo ainda.',
-                ),
+                child: Text('Nenhum jogo salvo ainda.'),
               ),
             ),
           ),
@@ -869,10 +866,8 @@ class MeusJogosPage
         ...jogos.asMap().entries.map(
           (entrada) {
             return Padding(
-              padding:
-                  const EdgeInsets.only(
-                bottom: 12,
-              ),              child: Card(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Card(
                 child: ListTile(
                   leading: CircleAvatar(
                     child: Text('${entrada.key + 1}'),
@@ -895,4 +890,3 @@ class MeusJogosPage
     );
   }
 }
-     
