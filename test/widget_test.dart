@@ -1,21 +1,22 @@
 import 'package:flutter_test/flutter_test.dart';
+
 import 'package:loto_inteligente/main.dart';
 
 void main() {
   testWidgets(
     'Loto Inteligente abre corretamente',
-    (tester) async {
+    (WidgetTester tester) async {
       await tester.pumpWidget(
         const LotoInteligenteApp(),
       );
 
       expect(
-        find.byType(LotoInteligenteApp),
+        find.text('Olá! 👋'),
         findsOneWidget,
       );
 
       expect(
-        find.text('Olá! 👋'),
+        find.text('Bem-vindo ao Loto Inteligente.'),
         findsOneWidget,
       );
     },
