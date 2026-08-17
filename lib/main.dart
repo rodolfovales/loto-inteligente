@@ -811,4 +811,106 @@ class MeusJogosPage
                   title: Text(
                     'Jogo ${entrada.key + 1}',
                     style: const TextStyle(
-                      fontWeight: FontWeight
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Dezenas: ${jogo.dezenas.join(' - ')}\n'
+                    'Score: ${jogo.score} • '
+                    'Pares: ${jogo.pares} • '
+                    'Soma: ${jogo.soma}',
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class PerfilPage extends StatefulWidget {
+  const PerfilPage({super.key});
+
+  @override
+  State<PerfilPage> createState() =>
+      _PerfilPageState();
+}
+
+class _PerfilPageState extends State<PerfilPage> {
+  bool notificacoes = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        Text(
+          'Perfil',
+          style: Theme.of(context)
+              .textTheme
+              .headlineMedium
+              ?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+        ),
+        const SizedBox(height: 18),
+        const Card(
+          elevation: 0,
+          child: ListTile(
+            leading: CircleAvatar(
+              child: Icon(Icons.person),
+            ),
+            title: Text('Usuário'),
+            subtitle: Text(
+              'Loto Inteligente',
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          elevation: 0,
+          child: SwitchListTile(
+            value: notificacoes,
+            onChanged: (valor) {
+              setState(() {
+                notificacoes = valor;
+              });
+            },
+            title: const Text(
+              'Notificações',
+            ),
+            subtitle: const Text(
+              'Ativar alertas do aplicativo.',
+            ),
+          ),
+        ),
+        const Card(
+          elevation: 0,
+          child: ListTile(
+            leading: Icon(
+              Icons.security_outlined,
+            ),
+            title: Text('Segurança'),
+            subtitle: Text(
+              'Autenticação online será integrada posteriormente.',
+            ),
+          ),
+        ),
+        const Card(
+          elevation: 0,
+          child: ListTile(
+            leading: Icon(
+              Icons.privacy_tip_outlined,
+            ),
+            title: Text('Privacidade'),
+            subtitle: Text(
+              'Configurações de privacidade serão adicionadas à versão final.',
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
