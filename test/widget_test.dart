@@ -3,14 +3,19 @@ import 'package:loto_inteligente/main.dart';
 
 void main() {
   testWidgets(
-    'Loto Inteligente inicia corretamente',
+    'Loto Inteligente abre corretamente',
     (tester) async {
       await tester.pumpWidget(
         const LotoInteligenteApp(),
       );
 
       expect(
-        find.text('Loto Inteligente'),
+        find.byType(LotoInteligenteApp),
+        findsOneWidget,
+      );
+
+      expect(
+        find.text('Olá! 👋'),
         findsOneWidget,
       );
     },
