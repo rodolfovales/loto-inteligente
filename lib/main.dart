@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   runApp(const LotoInteligenteApp());
@@ -36,6 +38,24 @@ class Jogo {
     required this.pares,
     required this.soma,
   });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'dezenas': dezenas,
+      'score': score,
+      'pares': pares,
+      'soma': soma,
+    };
+  }
+
+  factory Jogo.fromMap(Map<String, dynamic> map) {
+    return Jogo(
+      dezenas: List<int>.from(map['dezenas'] as List),
+      score: (map['score'] as num).toDouble(),
+      pares: map['pares'] as int,
+      soma: map['soma'] as int,
+    );
+  }
 }
 
 class Gerador {
@@ -124,10 +144,137 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   int pagina = 0;
 
-  final List<Jogo> jogosSalvos = [];
+  List<Jogo> jogosSalvos = [];
+
+  bool carregando = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _carregarJogos();
+  }
+
+  Future<void> _carregarJogos() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    final dados = prefs.getStringList('jogos_salvos') ?? [];
+
+    final jogos = <Jogo>[];
+
+    for (final item in dados) {
+      try {
+        final mapa = jsonDecode(item) as Map<String, dynamic>;
+        jogos.add(Jogo.fromMap(mapa));
+      } catch (_) {
+        // Ignora dados antigos ou corrompidos.
+      }
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      jogosSalvos = jogos;
+      carregando = false;
+    });
+  }
+
+  Future<void> _salvarTodosOsJogos() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    final dados = jogosSalvos
+        .map((jogo) => jsonEncode(jogo.toMap()))
+        .toList();
+
+    await prefs.setStringList('jogos_salvos', dados);
+  }
+
+  Future<void> _salvarJogo(Jogo jogo) async {
+    setState(() {
+      jogosSalvos.add(jogo);
+    });
+
+    await _salvarTodosOsJogos();
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Jogo salvo com sucesso!'),
+      ),
+    );
+  }
+
+  Future<void> _apagarJogo(int indice) async {
+    setState(() {
+      jogosSalvos.removeAt(indice);
+    });
+
+    await _salvarTodosOsJogos();
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Jogo apagado.'),
+      ),
+    );
+  }
+
+  Future<void> _apagarTodosOsJogos() async {
+    final confirmou = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Apagar todos os jogos?'),
+          content: const Text(
+            'Todos os jogos salvos serão removidos. '
+            'Essa ação não poderá ser desfeita.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context, false);
+              },
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(context, true);
+              },
+              child: const Text('Apagar todos'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmou != true) return;
+
+    setState(() {
+      jogosSalvos.clear();
+    });
+
+    await _salvarTodosOsJogos();
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Todos os jogos foram apagados.'),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (carregando) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
     final paginas = [
       DashboardPage(
         jogosSalvos: jogosSalvos.length,
@@ -138,20 +285,14 @@ class _AppShellState extends State<AppShell> {
         },
       ),
       GeradorPage(
-        salvarJogo: (jogo) {
-          setState(() {
-            jogosSalvos.add(jogo);
-          });
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Jogo salvo com sucesso!'),
-            ),
-          );
-        },
+        salvarJogo: _salvarJogo,
       ),
       const LaboratorioPage(),
-      MeusJogosPage(jogos: jogosSalvos),
+      MeusJogosPage(
+        jogos: jogosSalvos,
+        apagarJogo: _apagarJogo,
+        apagarTodos: _apagarTodosOsJogos,
+      ),
       const PerfilPage(),
     ];
 
@@ -183,8 +324,12 @@ class _AppShellState extends State<AppShell> {
             label: 'Laboratório',
           ),
           NavigationDestination(
-            icon: Icon(Icons.confirmation_number_outlined),
-            selectedIcon: Icon(Icons.confirmation_number),
+            icon: Icon(
+              Icons.confirmation_number_outlined,
+            ),
+            selectedIcon: Icon(
+              Icons.confirmation_number,
+            ),
             label: 'Meus Jogos',
           ),
           NavigationDestination(
@@ -424,8 +569,8 @@ class _GeradorPageState
 
     final excluidas =
         converterNumeros(
-          excluidasController.text,
-        );
+      excluidasController.text,
+    );
 
     if (fixas.any(excluidas.contains)) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -453,7 +598,8 @@ class _GeradorPageState
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'É necessário deixar pelo menos 15 dezenas disponíveis.',
+            'É necessário deixar pelo menos '
+            '15 dezenas disponíveis.',
           ),
         ),
       );
@@ -756,28 +902,82 @@ class LaboratorioCard
   }
 }
 
-class MeusJogosPage
-    extends StatelessWidget {
+class MeusJogosPage extends StatelessWidget {
   final List<Jogo> jogos;
+  final Future<void> Function(int indice) apagarJogo;
+  final Future<void> Function() apagarTodos;
 
   const MeusJogosPage({
     super.key,
     required this.jogos,
+    required this.apagarJogo,
+    required this.apagarTodos,
   });
+
+  Future<void> _confirmarApagar(
+    BuildContext context,
+    int indice,
+  ) async {
+    final confirmou = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Apagar jogo?'),
+          content: const Text(
+            'Deseja realmente apagar este jogo?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context, false);
+              },
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(context, true);
+              },
+              child: const Text('Apagar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmou == true) {
+      await apagarJogo(indice);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        Text(
-          'Meus Jogos',
-          style: Theme.of(context)
-              .textTheme
-              .headlineMedium
-              ?.copyWith(
-                fontWeight: FontWeight.bold,
+        Row(
+          mainAxisAlignment:
+              MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Text(
+                'Meus Jogos',
+                style: Theme.of(context)
+                    .textTheme
+                    .headlineMedium
+                    ?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
               ),
+            ),
+            if (jogos.isNotEmpty)
+              IconButton(
+                tooltip: 'Apagar todos',
+                onPressed: apagarTodos,
+                icon: const Icon(
+                  Icons.delete_sweep_outlined,
+                ),
+              ),
+          ],
         ),
         const SizedBox(height: 18),
         if (jogos.isEmpty)
@@ -794,6 +994,7 @@ class MeusJogosPage
           ),
         ...jogos.asMap().entries.map(
           (entrada) {
+            final indice = entrada.key;
             final jogo = entrada.value;
 
             return Padding(
@@ -805,20 +1006,34 @@ class MeusJogosPage
                 child: ListTile(
                   leading: CircleAvatar(
                     child: Text(
-                      '${entrada.key + 1}',
+                      '${indice + 1}',
                     ),
                   ),
                   title: Text(
-                    'Jogo ${entrada.key + 1}',
+                    'Jogo ${indice + 1}',
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   subtitle: Text(
-                    'Dezenas: ${jogo.dezenas.join(' - ')}\n'
+                    'Dezenas: '
+                    '${jogo.dezenas.join(' - ')}\n'
                     'Score: ${jogo.score} • '
                     'Pares: ${jogo.pares} • '
                     'Soma: ${jogo.soma}',
+                  ),
+                  isThreeLine: true,
+                  trailing: IconButton(
+                    tooltip: 'Apagar jogo',
+                    onPressed: () {
+                      _confirmarApagar(
+                        context,
+                        indice,
+                      );
+                    },
+                    icon: const Icon(
+                      Icons.delete_outline,
+                    ),
                   ),
                 ),
               ),
@@ -829,7 +1044,6 @@ class MeusJogosPage
     );
   }
 }
-
 class PerfilPage extends StatefulWidget {
   const PerfilPage({super.key});
 
