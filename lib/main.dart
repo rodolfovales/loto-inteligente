@@ -383,6 +383,20 @@ class MeusJogosPage extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       children: [
         Text(
+class MeusJogosPage extends StatelessWidget {
+  final List<Jogo> jogos;
+
+  const MeusJogosPage({
+    super.key,
+    required this.jogos,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        Text(
           'Meus Jogos',
           style: Theme.of(context)
               .textTheme
@@ -391,9 +405,7 @@ class MeusJogosPage extends StatelessWidget {
                 fontWeight: FontWeight.bold,
               ),
         ),
-
         const SizedBox(height: 18),
-
         if (jogos.isEmpty)
           const Card(
             elevation: 0,
@@ -406,7 +418,6 @@ class MeusJogosPage extends StatelessWidget {
               ),
             ),
           ),
-
         ...jogos.asMap().entries.map(
           (entrada) {
             final jogo = entrada.value;
@@ -444,7 +455,7 @@ class MeusJogosPage extends StatelessWidget {
     );
   }
 }
-
+          
 class GeradorPage extends StatefulWidget {
   final ValueChanged<Jogo> salvarJogo;
 
