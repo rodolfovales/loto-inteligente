@@ -2,11 +2,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:loto_inteligente/main.dart';
 
 void main() {
-  testWidgets('Loto Inteligente inicia corretamente', (tester) async {
-    await tester.pumpWidget(const LotoInteligenteApp());
+  testWidgets(
+    'Loto Inteligente inicia corretamente',
+    (tester) async {
+      await tester.pumpWidget(
+        const LotoInteligenteApp(),
+      );
 
-    expect(find.text('Loto Inteligente'), findsOneWidget);
-  });
+      expect(
+        find.text('Loto Inteligente'),
+        findsOneWidget,
+      );
+    },
+  );
 }
 
 class LotoInteligenteApp extends StatelessWidget {
@@ -361,40 +369,78 @@ class DashboardPage extends StatelessWidget {
   }
 }
 
-class StatCard extends StatelessWidget {
-  final String titulo;
-  final String valor;
+class MeusJogosPage extends StatelessWidget {
+  final List<Jogo> jogos;
 
-  const StatCard({
+  const MeusJogosPage({
     super.key,
-    required this.titulo,
-    required this.valor,
+    required this.jogos,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 0,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment:
-              CrossAxisAlignment.start,
-          children: [
-            Text(titulo),
-            const SizedBox(height: 8),
-            Text(
-              valor,
-              style: Theme.of(context)
-                  .textTheme
-                  .headlineSmall
-                  ?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-          ],
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        Text(
+          'Meus Jogos',
+          style: Theme.of(context)
+              .textTheme
+              .headlineMedium
+              ?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
         ),
-      ),
+
+        const SizedBox(height: 18),
+
+        if (jogos.isEmpty)
+          const Card(
+            elevation: 0,
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(
+                child: Text(
+                  'Nenhum jogo salvo ainda.',
+                ),
+              ),
+            ),
+          ),
+
+        ...jogos.asMap().entries.map(
+          (entrada) {
+            final jogo = entrada.value;
+
+            return Padding(
+              padding: const EdgeInsets.only(
+                bottom: 12,
+              ),
+              child: Card(
+                elevation: 0,
+                child: ListTile(
+                  leading: CircleAvatar(
+                    child: Text(
+                      '${entrada.key + 1}',
+                    ),
+                  ),
+                  title: Text(
+                    'Jogo ${entrada.key + 1}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Dezenas: ${jogo.dezenas.join(' - ')}\n'
+                    'Score: ${jogo.score} • '
+                    'Pares: ${jogo.pares} • '
+                    'Soma: ${jogo.soma}',
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
 }
