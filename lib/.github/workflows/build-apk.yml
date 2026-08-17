@@ -9,7 +9,7 @@ on:
 
 jobs:
   build:
-    name: Build APK
+    name: Build Loto Inteligente
     runs-on: ubuntu-latest
 
     steps:
@@ -21,10 +21,13 @@ jobs:
         with:
           channel: stable
 
+      - name: Criar estrutura Flutter
+        run: flutter create --platforms=android,ios .
+
       - name: Instalar dependências
         run: flutter pub get
 
-      - name: Verificar projeto
+      - name: Analisar código
         run: flutter analyze
 
       - name: Executar testes
