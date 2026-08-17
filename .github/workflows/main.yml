@@ -1,0 +1,38 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+
+      - name: Configurar Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Criar estrutura Android
+        run: flutter create --platforms=android .
+
+      - name: Instalar dependências
+        run: flutter pub get
+
+      - name: Analisar projeto
+        run: flutter analyze
+
+      - name: Executar testes
+        run: flutter test
+
+      - name: Compilar APK
+        run: flutter build apk --release
+
+      - name: Disponibilizar APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: loto-inteligente-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
