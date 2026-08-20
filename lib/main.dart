@@ -1,17 +1,10 @@
 import 'dart:convert';
 import 'dart:math';
 
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  await Firebase.initializeApp();
-
+void main() {
   runApp(const LotoInteligenteApp());
 }
 
@@ -63,14 +56,14 @@ class Jogo {
     return Jogo(
       dezenas: List<int>.from(map['dezenas'] as List),
       score: (map['score'] as num).toDouble(),
-      pares: map['pares'] as int,
-      soma: map['soma'] as int,
+      pares: (map['pares'] as num).toInt(),
+      soma: (map['soma'] as num).toInt(),
     );
   }
 }
 
 // ============================================================
-// GERADOR
+// GERADOR INTELIGENTE
 // ============================================================
 
 class Gerador {
@@ -83,6 +76,7 @@ class Gerador {
     final proibidas = excluidas.toSet();
     final numeros = <int>{};
 
+    // Adiciona as dezenas fixas.
     for (final numero in fixas) {
       if (!proibidas.contains(numero) &&
           numero >= 1 &&
@@ -91,6 +85,7 @@ class Gerador {
       }
     }
 
+    // Completa o jogo até chegar a 15 dezenas.
     while (numeros.length < 15) {
       final numero = random.nextInt(25) + 1;
 
@@ -101,17 +96,26 @@ class Gerador {
 
     final dezenas = numeros.toList()..sort();
 
+    // Quantidade de pares.
     final pares =
         dezenas.where((numero) => numero.isEven).length;
 
+    // Soma das dezenas.
     final soma =
         dezenas.fold<int>(0, (total, numero) => total + numero);
 
+    // Equilíbrio entre pares e ímpares.
     final equilibrio =
         (100 - ((pares - 7.5).abs() * 18))
             .clamp(0, 100)
             .toDouble();
 
+    // Distribuição pelas 5 faixas:
+    // 01-05
+    // 06-10
+    // 11-15
+    // 16-20
+    // 21-25
     final faixas = List<int>.filled(5, 0);
 
     for (final numero in dezenas) {
@@ -130,11 +134,13 @@ class Gerador {
             .clamp(0, 100)
             .toDouble();
 
+    // Score final.
     double score =
         equilibrio * 0.55 +
         distribuicao * 0.30 +
         15;
 
+    // Bônus para soma dentro da faixa definida.
     if (soma >= 150 && soma <= 220) {
       score += 5;
     }
@@ -143,9 +149,7 @@ class Gerador {
 
     return Jogo(
       dezenas: dezenas,
-      score: double.parse(
-        score.toStringAsFixed(1),
-      ),
+      score: double.parse(score.toStringAsFixed(1)),
       pares: pares,
       soma: soma,
     );
@@ -164,11 +168,13 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> {
+  static const String _chaveJogos = 'jogos_salvos';
+
   int pagina = 0;
 
-  bool carregando = true;
+  List<Jogo> jogosSalvos = [];
 
-  final List<Jogo> jogosSalvos = [];
+  bool carregando = true;
 
   @override
   void initState() {
@@ -176,60 +182,64 @@ class _AppShellState extends State<AppShell> {
     _carregarJogos();
   }
 
-  // ----------------------------------------------------------
-  // PERSISTÊNCIA
-  // ----------------------------------------------------------
+  // ==========================================================
+  // CARREGAR JOGOS
+  // ==========================================================
 
   Future<void> _carregarJogos() async {
     final prefs = await SharedPreferences.getInstance();
 
-    final dados = prefs.getStringList('jogos_salvos') ?? [];
+    final dados = prefs.getStringList(_chaveJogos);
 
-    final carregados = <Jogo>[];
-
-    for (final item in dados) {
+    if (dados != null) {
       try {
-        final mapa =
-            jsonDecode(item) as Map<String, dynamic>;
+        jogosSalvos = dados.map((item) {
+          final mapa =
+              jsonDecode(item) as Map<String, dynamic>;
 
-        carregados.add(
-          Jogo.fromMap(mapa),
-        );
+          return Jogo.fromMap(mapa);
+        }).toList();
       } catch (_) {
-        // Ignora registros corrompidos.
+        jogosSalvos = [];
       }
     }
 
-    if (!mounted) return;
-
-    setState(() {
-      jogosSalvos
-        ..clear()
-        ..addAll(carregados);
-
-      carregando = false;
-    });
+    if (mounted) {
+      setState(() {
+        carregando = false;
+      });
+    }
   }
 
-  Future<void> _salvarJogo(Jogo jogo) async {
+  // ==========================================================
+  // SALVAR JOGOS
+  // ==========================================================
+
+  Future<void> _salvarJogosNoDispositivo() async {
     final prefs = await SharedPreferences.getInstance();
 
-    jogosSalvos.add(jogo);
-
-    final dados = jogosSalvos
-        .map(
-          (jogo) => jsonEncode(jogo.toMap()),
-        )
-        .toList();
+    final dados = jogosSalvos.map((jogo) {
+      return jsonEncode(jogo.toMap());
+    }).toList();
 
     await prefs.setStringList(
-      'jogos_salvos',
+      _chaveJogos,
       dados,
     );
+  }
+
+  // ==========================================================
+  // SALVAR UM JOGO
+  // ==========================================================
+
+  Future<void> _salvarJogo(Jogo jogo) async {
+    setState(() {
+      jogosSalvos.add(jogo);
+    });
+
+    await _salvarJogosNoDispositivo();
 
     if (!mounted) return;
-
-    setState(() {});
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -240,29 +250,22 @@ class _AppShellState extends State<AppShell> {
     );
   }
 
+  // ==========================================================
+  // APAGAR UM JOGO
+  // ==========================================================
+
   Future<void> _apagarJogo(int indice) async {
     if (indice < 0 || indice >= jogosSalvos.length) {
       return;
     }
 
-    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      jogosSalvos.removeAt(indice);
+    });
 
-    jogosSalvos.removeAt(indice);
-
-    final dados = jogosSalvos
-        .map(
-          (jogo) => jsonEncode(jogo.toMap()),
-        )
-        .toList();
-
-    await prefs.setStringList(
-      'jogos_salvos',
-      dados,
-    );
+    await _salvarJogosNoDispositivo();
 
     if (!mounted) return;
-
-    setState(() {});
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -273,8 +276,14 @@ class _AppShellState extends State<AppShell> {
     );
   }
 
+  // ==========================================================
+  // APAGAR TODOS
+  // ==========================================================
+
   Future<void> _apagarTodosOsJogos() async {
-    if (jogosSalvos.isEmpty) return;
+    if (jogosSalvos.isEmpty) {
+      return;
+    }
 
     final confirmou = await showDialog<bool>(
       context: context,
@@ -284,43 +293,38 @@ class _AppShellState extends State<AppShell> {
             'Apagar todos os jogos?',
           ),
           content: const Text(
-            'Todos os jogos salvos serão removidos.',
+            'Todos os jogos salvos serão removidos '
+            'do aplicativo.',
           ),
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.pop(
-                  context,
-                  false,
-                );
+                Navigator.pop(context, false);
               },
               child: const Text('Cancelar'),
             ),
             FilledButton(
               onPressed: () {
-                Navigator.pop(
-                  context,
-                  true,
-                );
+                Navigator.pop(context, true);
               },
-              child: const Text('Apagar tudo'),
+              child: const Text('Apagar todos'),
             ),
           ],
         );
       },
     );
 
-    if (confirmou != true) return;
+    if (confirmou != true) {
+      return;
+    }
 
-    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      jogosSalvos.clear();
+    });
 
-    jogosSalvos.clear();
-
-    await prefs.remove('jogos_salvos');
+    await _salvarJogosNoDispositivo();
 
     if (!mounted) return;
-
-    setState(() {});
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -330,10 +334,6 @@ class _AppShellState extends State<AppShell> {
       ),
     );
   }
-
-  // ----------------------------------------------------------
-  // BUILD
-  // ----------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
@@ -374,47 +374,29 @@ class _AppShellState extends State<AppShell> {
       body: SafeArea(
         child: paginas[pagina],
       ),
-
       bottomNavigationBar: NavigationBar(
         selectedIndex: pagina,
-
         onDestinationSelected: (index) {
           setState(() {
             pagina = index;
           });
         },
-
         destinations: const [
           NavigationDestination(
-            icon: Icon(
-              Icons.home_outlined,
-            ),
-            selectedIcon: Icon(
-              Icons.home,
-            ),
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
             label: 'Início',
           ),
-
           NavigationDestination(
-            icon: Icon(
-              Icons.auto_awesome_outlined,
-            ),
-            selectedIcon: Icon(
-              Icons.auto_awesome,
-            ),
+            icon: Icon(Icons.auto_awesome_outlined),
+            selectedIcon: Icon(Icons.auto_awesome),
             label: 'Gerador',
           ),
-
           NavigationDestination(
-            icon: Icon(
-              Icons.science_outlined,
-            ),
-            selectedIcon: Icon(
-              Icons.science,
-            ),
+            icon: Icon(Icons.science_outlined),
+            selectedIcon: Icon(Icons.science),
             label: 'Laboratório',
           ),
-
           NavigationDestination(
             icon: Icon(
               Icons.confirmation_number_outlined,
@@ -424,14 +406,9 @@ class _AppShellState extends State<AppShell> {
             ),
             label: 'Meus Jogos',
           ),
-
           NavigationDestination(
-            icon: Icon(
-              Icons.person_outline,
-            ),
-            selectedIcon: Icon(
-              Icons.person,
-            ),
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person),
             label: 'Perfil',
           ),
         ],
@@ -541,9 +518,7 @@ class DashboardPage extends StatelessWidget {
                 valor: '$jogosSalvos',
               ),
             ),
-
             const SizedBox(width: 12),
-
             const Expanded(
               child: StatCard(
                 titulo: 'Melhor resultado',
@@ -563,9 +538,7 @@ class DashboardPage extends StatelessWidget {
                 valor: '—',
               ),
             ),
-
             SizedBox(width: 12),
-
             Expanded(
               child: StatCard(
                 titulo: 'Acertos 11+',
@@ -588,9 +561,7 @@ class DashboardPage extends StatelessWidget {
                 const Icon(
                   Icons.info_outline,
                 ),
-
                 const SizedBox(width: 12),
-
                 Expanded(
                   child: Text(
                     'O score é um índice estatístico '
@@ -671,8 +642,7 @@ class GeradorPage extends StatefulWidget {
       _GeradorPageState();
 }
 
-class _GeradorPageState
-    extends State<GeradorPage> {
+class _GeradorPageState extends State<GeradorPage> {
   final fixasController =
       TextEditingController();
 
@@ -683,28 +653,30 @@ class _GeradorPageState
 
   List<Jogo> jogos = [];
 
+  // ==========================================================
+  // CONVERTER TEXTO EM NÚMEROS
+  // ==========================================================
+
   List<int> converterNumeros(String texto) {
     return texto
         .split(RegExp(r'[,;\s]+'))
-        .where(
-          (item) => item.isNotEmpty,
-        )
+        .where((item) => item.isNotEmpty)
         .map(int.tryParse)
         .whereType<int>()
         .where(
-          (numero) =>
-              numero >= 1 &&
-              numero <= 25,
+          (numero) => numero >= 1 && numero <= 25,
         )
         .toSet()
         .toList();
   }
 
+  // ==========================================================
+  // GERAR JOGOS
+  // ==========================================================
+
   void gerarJogos() {
     final fixas =
-        converterNumeros(
-      fixasController.text,
-    );
+        converterNumeros(fixasController.text);
 
     final excluidas =
         converterNumeros(
@@ -719,7 +691,6 @@ class _GeradorPageState
           ),
         ),
       );
-
       return;
     }
 
@@ -731,7 +702,6 @@ class _GeradorPageState
           ),
         ),
       );
-
       return;
     }
 
@@ -739,11 +709,11 @@ class _GeradorPageState
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'É necessário deixar pelo menos 15 dezenas disponíveis.',
+            'É necessário deixar pelo menos 15 '
+            'dezenas disponíveis.',
           ),
         ),
       );
-
       return;
     }
 
@@ -762,7 +732,6 @@ class _GeradorPageState
   void dispose() {
     fixasController.dispose();
     excluidasController.dispose();
-
     super.dispose();
   }
 
@@ -790,7 +759,7 @@ class _GeradorPageState
         const SizedBox(height: 20),
 
         DropdownButtonFormField<int>(
-          value: quantidade,
+          initialValue: quantidade,
           decoration: const InputDecoration(
             labelText: 'Quantidade de jogos',
             border: OutlineInputBorder(),
@@ -828,8 +797,7 @@ class _GeradorPageState
 
         TextField(
           controller: fixasController,
-          keyboardType:
-              TextInputType.number,
+          keyboardType: TextInputType.number,
           decoration: const InputDecoration(
             labelText: 'Dezenas fixas',
             hintText: 'Ex.: 3, 8, 13',
@@ -840,10 +808,8 @@ class _GeradorPageState
         const SizedBox(height: 12),
 
         TextField(
-          controller:
-              excluidasController,
-          keyboardType:
-              TextInputType.number,
+          controller: excluidasController,
+          keyboardType: TextInputType.number,
           decoration: const InputDecoration(
             labelText: 'Dezenas excluídas',
             hintText: 'Ex.: 4, 10, 20',
@@ -871,14 +837,12 @@ class _GeradorPageState
         ...jogos.asMap().entries.map(
           (entrada) {
             return Padding(
-              padding:
-                  const EdgeInsets.only(
+              padding: const EdgeInsets.only(
                 bottom: 12,
               ),
               child: JogoCard(
                 jogo: entrada.value,
-                indice:
-                    entrada.key + 1,
+                indice: entrada.key + 1,
                 salvar: () {
                   widget.salvarJogo(
                     entrada.value,
@@ -897,16 +861,258 @@ class _GeradorPageState
 // JOGO CARD
 // ============================================================
 
-class MeusJogosPage
-    extends StatelessWidget {
+class JogoCard extends StatelessWidget {
+  final Jogo jogo;
+  final int indice;
+  final VoidCallback salvar;
+
+  const JogoCard({
+    super.key,
+    required this.jogo,
+    required this.indice,
+    required this.salvar,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment:
+              CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment:
+                  MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'JOGO $indice',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+
+                Text(
+                  'Score ${jogo.score}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 14),
+
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: jogo.dezenas.map(
+                (numero) {
+                  return CircleAvatar(
+                    radius: 19,
+                    child: Text(
+                      numero
+                          .toString()
+                          .padLeft(2, '0'),
+                    ),
+                  );
+                },
+              ).toList(),
+            ),
+
+            const Divider(height: 26),
+
+            Text(
+              'Pares: ${jogo.pares} • '
+              'Ímpares: ${15 - jogo.pares}',
+            ),
+
+            const SizedBox(height: 5),
+
+            Text(
+              'Soma: ${jogo.soma}',
+            ),
+
+            const SizedBox(height: 12),
+
+            OutlinedButton.icon(
+              onPressed: salvar,
+              icon: const Icon(
+                Icons.save_outlined,
+              ),
+              label: const Text(
+                'Salvar jogo',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================
+// LABORATÓRIO
+// ============================================================
+
+class LaboratorioPage extends StatelessWidget {
+  const LaboratorioPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        Text(
+          'Laboratório',
+          style: Theme.of(context)
+              .textTheme
+              .headlineMedium
+              ?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+        ),
+
+        const SizedBox(height: 8),
+
+        const Text(
+          'Ferramentas de análise estatística.',
+        ),
+
+        const SizedBox(height: 18),
+
+        LaboratorioCard(
+          icone: Icons.history,
+          titulo: 'Backtest',
+          descricao:
+              'Teste estratégias usando concursos históricos.',
+          aoTocar: () {
+            _mostrarEmDesenvolvimento(
+              context,
+              'Backtest',
+            );
+          },
+        ),
+
+        LaboratorioCard(
+          icone: Icons.compare_arrows,
+          titulo: 'Comparar estratégias',
+          descricao:
+              'Compare diferentes métodos sob a mesma metodologia.',
+          aoTocar: () {
+            _mostrarEmDesenvolvimento(
+              context,
+              'Comparar estratégias',
+            );
+          },
+        ),
+
+        LaboratorioCard(
+          icone: Icons.science,
+          titulo: 'Monte Carlo',
+          descricao:
+              'Realize simulações estatísticas.',
+          aoTocar: () {
+            _mostrarEmDesenvolvimento(
+              context,
+              'Monte Carlo',
+            );
+          },
+        ),
+
+        LaboratorioCard(
+          icone: Icons.analytics_outlined,
+          titulo: 'Estatísticas',
+          descricao:
+              'Frequência, atrasos, repetições e distribuição.',
+          aoTocar: () {
+            _mostrarEmDesenvolvimento(
+              context,
+              'Estatísticas',
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  static void _mostrarEmDesenvolvimento(
+    BuildContext context,
+    String recurso,
+  ) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '$recurso será implementado na próxima etapa.',
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================
+// LABORATÓRIO CARD
+// ============================================================
+
+class LaboratorioCard extends StatelessWidget {
+  final IconData icone;
+  final String titulo;
+  final String descricao;
+  final VoidCallback aoTocar;
+
+  const LaboratorioCard({
+    super.key,
+    required this.icone,
+    required this.titulo,
+    required this.descricao,
+    required this.aoTocar,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(
+        bottom: 12,
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.all(14),
+
+        leading: CircleAvatar(
+          child: Icon(icone),
+        ),
+
+        title: Text(
+          titulo,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+
+        subtitle: Text(descricao),
+
+        trailing: const Icon(
+          Icons.chevron_right,
+        ),
+
+        onTap: aoTocar,
+      ),
+    );
+  }
+}
+
+// ============================================================
+// MEUS JOGOS
+// ============================================================
+
+class MeusJogosPage extends StatelessWidget {
   final List<Jogo> jogos;
 
-  final Future<void> Function(
-    int indice,
-  ) apagarJogo;
+  final Future<void> Function(int indice) apagarJogo;
 
-  final Future<void> Function()
-      apagarTodos;
+  final Future<void> Function() apagarTodos;
 
   const MeusJogosPage({
     super.key,
@@ -915,21 +1121,22 @@ class MeusJogosPage
     required this.apagarTodos,
   });
 
+  // ==========================================================
+  // CONFIRMAR APAGAMENTO
+  // ==========================================================
+
   Future<void> _confirmarApagar(
     BuildContext context,
     int indice,
   ) async {
-    final confirmou =
-        await showDialog<bool>(
+    final confirmou = await showDialog<bool>(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title:
-              const Text(
+          title: const Text(
             'Apagar jogo?',
           ),
-          content:
-              const Text(
+          content: const Text(
             'Deseja realmente apagar este jogo?',
           ),
           actions: [
@@ -940,11 +1147,11 @@ class MeusJogosPage
                   false,
                 );
               },
-              child:
-                  const Text(
+              child: const Text(
                 'Cancelar',
               ),
             ),
+
             FilledButton(
               onPressed: () {
                 Navigator.pop(
@@ -952,8 +1159,7 @@ class MeusJogosPage
                   true,
                 );
               },
-              child:
-                  const Text(
+              child: const Text(
                 'Apagar',
               ),
             ),
@@ -967,42 +1173,89 @@ class MeusJogosPage
     }
   }
 
+  // ==========================================================
+  // CONFIRMAR APAGAR TODOS
+  // ==========================================================
+
+  Future<void> _confirmarApagarTodos(
+    BuildContext context,
+  ) async {
+    final confirmou = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text(
+            'Apagar todos os jogos?',
+          ),
+          content: const Text(
+            'Essa ação removerá todos os jogos '
+            'salvos do aplicativo.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(
+                  context,
+                  false,
+                );
+              },
+              child: const Text(
+                'Cancelar',
+              ),
+            ),
+
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(
+                  context,
+                  true,
+                );
+              },
+              child: const Text(
+                'Apagar todos',
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmou == true) {
+      await apagarTodos();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding:
-          const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(20),
       children: [
         Row(
           mainAxisAlignment:
-              MainAxisAlignment
-                  .spaceBetween,
+              MainAxisAlignment.spaceBetween,
           children: [
             Expanded(
               child: Text(
                 'Meus Jogos',
-                style: Theme.of(
-                  context,
-                )
+                style: Theme.of(context)
                     .textTheme
                     .headlineMedium
                     ?.copyWith(
-                      fontWeight:
-                          FontWeight.bold,
+                      fontWeight: FontWeight.bold,
                     ),
               ),
             ),
 
             if (jogos.isNotEmpty)
               IconButton(
-                tooltip:
-                    'Apagar todos',
-                onPressed:
-                    apagarTodos,
-                icon:
-                    const Icon(
-                  Icons
-                      .delete_sweep_outlined,
+                tooltip: 'Apagar todos',
+                onPressed: () {
+                  _confirmarApagarTodos(
+                    context,
+                  );
+                },
+                icon: const Icon(
+                  Icons.delete_sweep_outlined,
                 ),
               ),
           ],
@@ -1014,8 +1267,7 @@ class MeusJogosPage
           const Card(
             elevation: 0,
             child: Padding(
-              padding:
-                  EdgeInsets.all(24),
+              padding: EdgeInsets.all(24),
               child: Center(
                 child: Text(
                   'Nenhum jogo salvo ainda.',
@@ -1024,27 +1276,25 @@ class MeusJogosPage
             ),
           ),
 
-        ...jogos
-            .asMap()
-            .entries
-            .map(
+        ...jogos.asMap().entries.map(
           (entrada) {
-            final indice =
-                entrada.key;
-
-            final jogo =
-                entrada.value;
+            final indice = entrada.key;
+            final jogo = entrada.value;
 
             return Padding(
-              padding:
-                  const EdgeInsets.only(
+              padding: const EdgeInsets.only(
                 bottom: 12,
               ),
               child: Card(
                 elevation: 0,
                 child: ListTile(
-                  leading:
-                      CircleAvatar(
+                  contentPadding:
+                      const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+
+                  leading: CircleAvatar(
                     child: Text(
                       '${indice + 1}',
                     ),
@@ -1052,39 +1302,37 @@ class MeusJogosPage
 
                   title: Text(
                     'Jogo ${indice + 1}',
-                    style:
-                        const TextStyle(
-                      fontWeight:
-                          FontWeight.bold,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
 
-                  subtitle:
-                      Text(
-                    'Dezenas: '
-                    '${jogo.dezenas.join(' - ')}\n'
-                    'Score: ${jogo.score} • '
-                    'Pares: ${jogo.pares} • '
-                    'Soma: ${jogo.soma}',
+                  subtitle: Padding(
+                    padding:
+                        const EdgeInsets.only(
+                      top: 6,
+                    ),
+                    child: Text(
+                      'Dezenas: '
+                      '${jogo.dezenas.join(' - ')}\n'
+                      'Score: ${jogo.score} • '
+                      'Pares: ${jogo.pares} • '
+                      'Soma: ${jogo.soma}',
+                    ),
                   ),
 
-                  isThreeLine:
-                      true,
+                  isThreeLine: true,
 
-                  trailing:
-                      IconButton(
-                    tooltip:
-                        'Apagar jogo',
+                  trailing: IconButton(
+                    tooltip: 'Apagar jogo',
                     onPressed: () {
                       _confirmarApagar(
                         context,
                         indice,
                       );
                     },
-                    icon:
-                        const Icon(
-                      Icons
-                          .delete_outline,
+                    icon: const Icon(
+                      Icons.delete_outline,
                     ),
                   ),
                 ),
@@ -1098,166 +1346,24 @@ class MeusJogosPage
 }
 
 // ============================================================
-// PERFIL / GOOGLE
+// PERFIL
 // ============================================================
 
-class PerfilPage
-    extends StatefulWidget {
-  const PerfilPage({
-    super.key,
-  });
+class PerfilPage extends StatefulWidget {
+  const PerfilPage({super.key});
 
   @override
   State<PerfilPage> createState() =>
       _PerfilPageState();
 }
 
-class _PerfilPageState
-    extends State<PerfilPage> {
+class _PerfilPageState extends State<PerfilPage> {
   bool notificacoes = true;
-
-  bool entrando = false;
-
-  final GoogleSignIn googleSignIn =
-      GoogleSignIn();
-
-  // ----------------------------------------------------------
-  // LOGIN GOOGLE
-  // ----------------------------------------------------------
-
-  Future<void> _entrarComGoogle() async {
-    if (entrando) return;
-
-    setState(() {
-      entrando = true;
-    });
-
-    try {
-      final GoogleSignInAccount?
-          googleUser =
-          await googleSignIn.signIn();
-
-      if (googleUser == null) {
-        return;
-      }
-
-      final GoogleSignInAuthentication
-          googleAuth =
-          await googleUser.authentication;
-
-      final credential =
-          GoogleAuthProvider.credential(
-        accessToken:
-            googleAuth.accessToken,
-        idToken:
-            googleAuth.idToken,
-      );
-
-      await FirebaseAuth.instance
-          .signInWithCredential(
-        credential,
-      );
-
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Login realizado com sucesso!',
-          ),
-        ),
-      );
-
-      setState(() {});
-    } on FirebaseAuthException catch (e) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Erro no login: ${e.message ?? e.code}',
-          ),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Não foi possível entrar com Google.',
-          ),
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          entrando = false;
-        });
-      }
-    }
-  }
-
-  // ----------------------------------------------------------
-  // SAIR
-  // ----------------------------------------------------------
-
-  Future<void> _sair() async {
-    try {
-      await googleSignIn.signOut();
-
-      await FirebaseAuth.instance
-          .signOut();
-
-      if (!mounted) return;
-
-      setState(() {});
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Você saiu da conta.',
-          ),
-        ),
-      );
-    } catch (_) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Não foi possível sair da conta.',
-          ),
-        ),
-      );
-    }
-  }
-
-  // ----------------------------------------------------------
-  // PERFIL
-  // ----------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
-    final usuario =
-        FirebaseAuth.instance.currentUser;
-
-    final logado =
-        usuario != null;
-
     return ListView(
-      padding:
-          const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(20),
       children: [
         Text(
           'Perfil',
@@ -1265,132 +1371,25 @@ class _PerfilPageState
               .textTheme
               .headlineMedium
               ?.copyWith(
-                fontWeight:
-                    FontWeight.bold,
+                fontWeight: FontWeight.bold,
               ),
         ),
 
         const SizedBox(height: 18),
 
-        Card(
+        const Card(
           elevation: 0,
-          child: Padding(
-            padding:
-                const EdgeInsets.all(18),
-            child: Column(
-              children: [
-                CircleAvatar(
-                  radius: 38,
-                  backgroundImage:
-                      logado &&
-                              usuario
-                                      .photoURL !=
-                                  null
-                          ? NetworkImage(
-                              usuario
-                                  .photoURL!,
-                            )
-                          : null,
-                  child:
-                      !logado ||
-                              usuario
-                                      .photoURL ==
-                                  null
-                          ? const Icon(
-                              Icons.person,
-                              size: 38,
-                            )
-                          : null,
-                ),
-
-                const SizedBox(
-                  height: 12,
-                ),
-
-                Text(
-                  logado
-                      ? usuario.displayName ??
-                          'Usuário Google'
-                      : 'Visitante',
-                  style:
-                      const TextStyle(
-                    fontSize: 20,
-                    fontWeight:
-                        FontWeight.bold,
-                  ),
-                  textAlign:
-                      TextAlign.center,
-                ),
-
-                const SizedBox(
-                  height: 4,
-                ),
-
-                Text(
-                  logado
-                      ? usuario.email ??
-                          ''
-                      : 'Entre para sincronizar sua conta.',
-                  textAlign:
-                      TextAlign.center,
-                ),
-
-                const SizedBox(
-                  height: 18,
-                ),
-
-                if (!logado)
-                  SizedBox(
-                    width:
-                        double.infinity,
-                    child:
-                        FilledButton.icon(
-                      onPressed:
-                          entrando
-                              ? null
-                              : _entrarComGoogle,
-                      icon:
-                          entrando
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child:
-                                      CircularProgressIndicator(
-                                    strokeWidth:
-                                        2,
-                                  ),
-                                )
-                              : const Icon(
-                                  Icons
-                                      .account_circle_outlined,
-                                ),
-                      label:
-                          Text(
-                        entrando
-                            ? 'Entrando...'
-                            : 'Entrar com Google',
-                      ),
-                    ),
-                  ),
-
-                if (logado)
-                  SizedBox(
-                    width:
-                        double.infinity,
-                    child:
-                        OutlinedButton.icon(
-                      onPressed: _sair,
-                      icon:
-                          const Icon(
-                        Icons.logout,
-                      ),
-                      label:
-                          const Text(
-                        'Sair da conta',
-                      ),
-                    ),
-                  ),
-              ],
+          child: ListTile(
+            leading: CircleAvatar(
+              child: Icon(
+                Icons.person,
+              ),
+            ),
+            title: Text(
+              'Usuário',
+            ),
+            subtitle: Text(
+              'Loto Inteligente',
             ),
           ),
         ),
@@ -1403,55 +1402,79 @@ class _PerfilPageState
             value: notificacoes,
             onChanged: (valor) {
               setState(() {
-                notificacoes =
-                    valor;
+                notificacoes = valor;
               });
             },
-            title:
-                const Text(
+            title: const Text(
               'Notificações',
             ),
-            subtitle:
-                const Text(
+            subtitle: const Text(
               'Ativar alertas do aplicativo.',
             ),
           ),
         ),
 
-        Card(
-          elevation: 0,
-          child: ListTile(
-            leading:
-                const Icon(
-              Icons.security_outlined,
-            ),
-            title:
-                const Text(
-              'Segurança',
-            ),
-            subtitle:
-                Text(
-              logado
-                  ? 'Conta protegida pelo Firebase Authentication.'
-                  : 'Entre com sua conta Google para ativar a autenticação.',
-            ),
-          ),
-        ),
+        const SizedBox(height: 12),
 
         const Card(
           elevation: 0,
           child: ListTile(
-            leading:
-                Icon(
+            leading: Icon(
+              Icons.login,
+            ),
+            title: Text(
+              'Conta Google',
+            ),
+            subtitle: Text(
+              'Login com Google será conectado ao Firebase.',
+            ),
+            trailing: Icon(
+              Icons.chevron_right,
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 12),
+
+        const Card(
+          elevation: 0,
+          child: ListTile(
+            leading: Icon(
+              Icons.security_outlined,
+            ),
+            title: Text(
+              'Segurança',
+            ),
+            subtitle: Text(
+              'Configurações de segurança da conta.',
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 12),
+
+        const Card(
+          elevation: 0,
+          child: ListTile(
+            leading: Icon(
               Icons.privacy_tip_outlined,
             ),
-            title:
-                Text(
+            title: Text(
               'Privacidade',
             ),
-            subtitle:
-                Text(
-              'Seus dados de autenticação são gerenciados pelo Firebase.',
+            subtitle: Text(
+              'Configurações de privacidade do aplicativo.',
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 20),
+
+        const Center(
+          child: Text(
+            'Loto Inteligente • Versão 1.0.0',
+            style: TextStyle(
+              fontSize: 12,
             ),
           ),
         ),
