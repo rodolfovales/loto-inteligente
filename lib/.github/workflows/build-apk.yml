@@ -2,6 +2,9 @@ name: Build Android APK
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
   build:
@@ -11,15 +14,59 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: "3.29.3"
           channel: stable
 
-      - name: Create Flutter platform files
-        run: flutter create --platforms=android .
+      - name: Create Android project
+        run: |
+          flutter create \
+            --platforms=android \
+            --org com.rodolfovales \
+            .
 
-      - name: Install dependencies
+      - name: Configure Firebase
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          printf '%s' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+
+      - name: Configure Google Services plugin
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("android/settings.gradle.kts")
+          text = path.read_text()
+
+          text = text.replace(
+              'id("dev.flutter.flutter-plugin-loader") version "1.0.0"',
+              'id("dev.flutter.flutter-plugin-loader") version "1.0.0"\n    id("com.google.gms.google-services") version "4.4.2" apply false'
+          )
+
+          path.write_text(text)
+
+          path = Path("android/app/build.gradle.kts")
+          text = path.read_text()
+
+          if 'com.google.gms.google-services' not in text:
+              text = text.replace(
+                  'plugins {',
+                  'plugins {\n    id("com.google.gms.google-services")'
+              )
+
+          path.write_text(text)
+          PY
+
+      - name: Get dependencies
         run: flutter pub get
 
       - name: Analyze
